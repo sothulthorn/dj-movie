@@ -4,15 +4,25 @@ from movielist_app.api.serializers import WatchListSerializer, StreamPlateformSe
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 
 class ReviewCreate(generics.CreateAPIView):
   serializer_class = ReviewSerializer
+  
+  def get_queryset(self):
+    return Review.objects.all()
   
   def perform_create(self, serializer):
     pk = self.kwargs.get('pk')
     movie = WatchList.objects.get(pk=pk)
     
-    serializer.save(movielist=movie)
+    review_user = self.request.user
+    review_queryset = Review.objects.filter(movielist=movie, review_user=review_user)
+    
+    if review_queryset.exists():
+      raise ValidationError("You have already reviewed this movie!")
+    
+    serializer.save(movielist=movie, review_user=review_user)
 
 class ReviewList(generics.ListAPIView):
   serializer_class = ReviewSerializer
@@ -79,6 +89,19 @@ class StreamPlateformVS(viewsets.ViewSet):
     movielist = get_object_or_404(queryset, pk=pk)
     serializer = StreamPlateformSerializer(movielist)
     return Response(serializer.data)
+  
+  def create(self, request):
+    serializer = StreamPlateformSerializer(data=request.data)
+    if serializer.is_valid():
+      serializer.save()
+      return Response(serializer.data)
+    else:
+      return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+  
+  def destroy(self, request, pk):
+    plateform = StreamPlateform.objects.get(pk=pk)
+    plateform.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 class StreamPlateformAV(APIView):
   def get(self, request):
